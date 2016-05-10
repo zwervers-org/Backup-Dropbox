@@ -42,41 +42,29 @@ ECOUNT=0
 mkdir -p $BKLOG
 mkdir -p $BKDIR
 
-# File for saving DB list of file in map
+# File for saving DB list of files in map
 MapContent=$BKLOG"$DAY.info"
 
 # Make log file
 BKLOG=$BKLOG"$DAY.log"
 
 # Since we send this through e-mail, start the e-mail stuff
-To="root@zwerver.org"
-Sbject="Generated backup report Camera Upload DropBox on $YEAR.$MONTH.$DAY"
+TO="root@zwerver.org"
+FROM="Backups <backups@zwerver.org>"
+SBJECT="Generated backup report Camera Upload DropBox on $YEAR.$MONTH.$DAY"
 
-# make directories if they are not exists
-#for DIR in "{DIRARR[@]}";
-#do
-#	if [ ! -d "$i" ]; then
-#		mkdir -p $i
-#	fi
-#done
 
+#----------------NO CHANGES BELOW NEEDED----------------
 # Make sure files are generated
 touch $BKLOG
 touch $MapContent
 
 #Start log file
-echo "To: $To" > $BKLOG
-echo "From: Backups <root@zwerver.org>" >> $BKLOG
-echo "Subject: $Sbject\n" >> $BKLOG
+echo "To: $TO" > $BKLOG
+echo "From: $FROM" >> $BKLOG
+echo "Subject: $SBJECT\n" >> $BKLOG
 
 echo ">> Backup for: $YEAR.$MONTH.$DAY started @ `date +%H:%M:%S`\n" >> $BKLOG
-
-# Cycle through all file and place previous month in new directory
-#for d in "${DRIVE[@]}"; do
-#	echo "- Backing up drive $d" >> $BKLOG
-#
-	# By default, at least don't backup lost+found directories
-#	EX="--exclude=lost+found"
 
 # Put pictures per year in right tempory backup directory in Dropbox
  a= echo `/Dropbox-Uploader/dropbox_uploader.sh list "$DBPHOTODIR" >> $MapContent`
