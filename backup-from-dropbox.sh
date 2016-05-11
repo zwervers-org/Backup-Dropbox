@@ -12,18 +12,16 @@
 #
 # Last modified: 12-04-2016
 
-# Day of the month
+# Set time info in variable
+SEC='date +%S'
 DAY=`date +%d`
-
-# Month of the year
 MONTH=`date +%m`
-
 YEAR=`date +%Y`
 
-# Month for new month check (save alway two new backups
+# Month for new month check (saves always to new backups)
 RDATE=`date -d 'now - 31 days' +%m`
 
-# Backup directory to download files in (2011/08/31 for 08.31.2011)
+# Backup directory to download files in localy
 #BKDIR="/mnt/WD_public/Shared\ Pictures/"
 BKDIR="/mnt/photo/test/"
 
@@ -32,21 +30,21 @@ BKDIR="/mnt/photo/test/"
 DBPHOTODIR="Test download"
 DBBKDIR="Photo Backup"
 
-# Backup log file
-BKLOG="/backups/$YEAR/$MONTH/"
+# Location of Dropbox Uploader script
+DBUPLOAD="/Dropbox-Uploader"
+# Regex info to get errors from Dropbox Upload
+REGEX="\.\.\.\s+FAILED"
 
 #Set error counter to 0
 ECOUNT=0
 
-#DIRARR=($BKDIR, $BKLOG, $MapContent)
-mkdir -p $BKLOG
-mkdir -p $BKDIR
-
-# File for saving DB list of files in map
-MapContent=$BKLOG"$DAY.info"
-
-# Make log file
-BKLOG=$BKLOG"$DAY.log"
+# Make log files
+ # Backup log files directory
+  BKLOGDIR="/backups/$YEAR/$MONTH/"
+ # General log file
+  BKLOG=$BKLOGDIR"$DAY.log"
+ # Location for saving Dropbox meta info of files in map
+  MAPCONTENTDIR=$BKLOGDIR$DAY
 
 # Since we send this through e-mail, start the e-mail stuff
 TO="root@zwerver.org"
@@ -55,47 +53,68 @@ SBJECT="Generated backup report Camera Upload DropBox on $YEAR.$MONTH.$DAY"
 
 
 #----------------NO CHANGES BELOW NEEDED----------------
+
+#Make sure directories are generated
+mkdir -p $BKLOGDIR
+mkdir -p $BKDIR
+
 # Make sure files are generated
 touch $BKLOG
-touch $MapContent
 
 #Start log file
-echo "To: $TO" > $BKLOG
+echo "To: $TO" >> $BKLOG
 echo "From: $FROM" >> $BKLOG
 echo "Subject: $SBJECT\n" >> $BKLOG
 
 echo ">> Backup for: $YEAR.$MONTH.$DAY started @ `date +%H:%M:%S`\n" >> $BKLOG
 
-# Put pictures per year in right tempory backup directory in Dropbox
- a= echo `/Dropbox-Uploader/dropbox_uploader.sh list "$DBPHOTODIR" >> $MapContent`
-   #Check for error
-   ERROR=`echo -n "$a" | regex \.\.\.\s+FAILED`
+# Function to look for errors add using the Dropbox Uploader script
+function ErrorCheck{
+ ERROR=`echo -n "$a" | egrep "$REGEX"`
    if [ $ERROR ]; then
       EINFO[$ECOUNT]=`echo $(head -n 1 $a)`
       echo "->> Error: ${EINFO[$ECOUNT]}D\n" >> $BKLOG
       ECOUNT=$((ECOUNT+1))
    fi
+}
 
+# Read map content for the map
+function ReadDBMap {
+ # File for saving DB list of files in map
+ local DBDIRNAME=$1
+ local MAPCONTENT=$(("$MAPCONTENTDIR$DBDIRNAME.content"))
+ touch $MapContent
+
+ a= echo `"$DBUPLOAD/dropbox_uploader.sh list $1" >> $MapContent`
+   #Check for error
+   ErrorCheck($a)
+   
  COUNTFILES=`wc -l < $MapContent`
-  echo "Dropbox files in list : $COUNTFILES\n" >> $BKLOG
+  echo "Dropbox files in directory $1: $COUNTFILES\n" >> $BKLOG
+}
 
-#set startrow and counter for reading filename data
-COUNTER=1
-SROW=2
+# Load file meta information (filename and change date) into array
+Function LoadMetaInfo{
+ local DBDIRNAME=$1
+ local MAPCONTENT=$(("$MAPCONTENTDIR$DBDIRNAME.content"))
+ #set startrow and counter for reading filename data
+ local COUNTER=1
+ local SROW=2
 
-if [ $COUNTFILES -gt 1 ] ; then
-#read file name data into array
+ if [ $COUNTFILES -gt 1 ] ; then
+  #read file name data into array
   while IFS='' read LINE || [[ -n "$LINE" ]]; do
    if [ $COUNTER -ge $SROW ]; then
-        FNAME[$COUNTER]=`echo $LINE | awk '{printf $3" "$4}'`
-        FDATE[$COUNTER]=`echo $LINE | awk '{printf $3}'`
+        FNAME$DBDIRNAME[$COUNTER]=`echo $LINE | awk '{printf $3" "$4}'`
+        FDATE$DBDIRNAME[$COUNTER]=`echo $LINE | awk '{printf $3}'`
         echo "Save info for ${FNAME[$COUNTER]} with date: ${FDATE[$COUNTER]}\n" >> $BKLOG
    fi
 
    COUNTER=$((COUNTER+1))
 
-  done < $MapContent
-fi
+  done < $MAPCONTENT
+ fi
+}
 
 #use filename data from array to copy files to temp directory
 COUNTER=$SROW
