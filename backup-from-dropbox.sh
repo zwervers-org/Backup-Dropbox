@@ -44,7 +44,7 @@ ECOUNT=0
  # General log file
   BKLOG=$BKLOGDIR"$DAY.log"
  # Location for saving Dropbox meta info of files in map
-  MAPCONTENTDIR=$BKLOGDIR$DAY
+  MAPCONTENTDIR="$BKLOGDIR$DAY"
 
 # Since we send this through e-mail, start the e-mail stuff
 TO="root@zwerver.org"
@@ -61,6 +61,9 @@ mkdir -p $BKDIR
 # Make sure files are generated
 touch $BKLOG
 
+# Set startrow from Dropbox-output files
+SROW=2
+
 #Start log file
 echo "To: $TO" >> $BKLOG
 echo "From: $FROM" >> $BKLOG
@@ -69,44 +72,72 @@ echo "Subject: $SBJECT\n" >> $BKLOG
 echo ">> Backup for: $YEAR.$MONTH.$DAY started @ `date +%H:%M:%S`\n" >> $BKLOG
 
 # Function to look for errors add using the Dropbox Uploader script
+#$1 = type of function to check error information
+#$2 = Error information
 function ErrorCheck{
- ERROR=`echo -n "$a" | egrep "$REGEX"`
-   if [ $ERROR ]; then
-      EINFO[$ECOUNT]=`echo $(head -n 1 $a)`
-      echo "->> Error: ${EINFO[$ECOUNT]}D\n" >> $BKLOG
-      ECOUNT=$((ECOUNT+1))
-   fi
+ case $1 in
+   list)
+       ERROR=`echo -n "$2" | egrep "$REGEX"`
+       if [ $ERROR ]; then
+          EINFO[$ECOUNT]=`echo $(head -n 1 $1)`
+          echo "->> Error: ${EINFO[$ECOUNT]}D\n" >> $BKLOG
+          ECOUNT=$((ECOUNT+1))
+          return true
+       else
+          return false
+       fi
+   ;;
+   copy)
+      ERROR=`echo -n "$2" | \.\.\.\ FAILED`
+      if [ n "$SD" | \.\.\.\ FAILED` ]; then
+         EINFO[$ECOUNT]=`echo $SD`
+         echo "- File $DBFILE has given an error\n" >> $BKLOG
+         echo "-- Error: ${EINFO[$ECOUNT]}D\n" >> $BKLOG
+         ECOUNT=$((ECOUNT+1))
+         return true
+       else
+         return false
+       fi
+   ;;
+   *)
+     EINFO[$ECOUNT]=`echo "No error type given\n Error string is: $2"
+     ECOUNT=$((ECOUNT+1))
+     return true
+   ;;
+ esac
 }
 
 # Read map content for the map
 function ReadDBMap {
  # File for saving DB list of files in map
+ #$1 = Dropbox directory name (could be sub-dir from DropBox Backup DIRectory)
  local DBDIRNAME=$1
  local MAPCONTENT=$(("$MAPCONTENTDIR$DBDIRNAME.content"))
  touch $MapContent
 
  a= echo `"$DBUPLOAD/dropbox_uploader.sh list $1" >> $MapContent`
    #Check for error
-   ErrorCheck($a)
+   if [ !ErrorCheck("list" $a) ]; then
    
- COUNTFILES=`wc -l < $MapContent`
-  echo "Dropbox files in directory $1: $COUNTFILES\n" >> $BKLOG
+      COUNTFILES=`wc -l < $MapContent`
+      echo "Dropbox files in directory $1: $COUNTFILES\n" >> $BKLOG
+   fi
 }
 
 # Load file meta information (filename and change date) into array
+#$1 = Dropbox directory name (could be sub-dir from DropBox Backup DIRectory)
 Function LoadMetaInfo{
  local DBDIRNAME=$1
  local MAPCONTENT=$(("$MAPCONTENTDIR$DBDIRNAME.content"))
  #set startrow and counter for reading filename data
  local COUNTER=1
- local SROW=2
 
  if [ $COUNTFILES -gt 1 ] ; then
   #read file name data into array
-  while IFS='' read LINE || [[ -n "$LINE" ]]; do
+  while IFS='[' read TYPE SIZE FNAME MDATE; do
    if [ $COUNTER -ge $SROW ]; then
-        FNAME$DBDIRNAME[$COUNTER]=`echo $LINE | awk '{printf $3" "$4}'`
-        FDATE$DBDIRNAME[$COUNTER]=`echo $LINE | awk '{printf $3}'`
+        FNAME$DBDIRNAME[$COUNTER]=`echo $FNAME`
+        FDATE$DBDIRNAME[$COUNTER]=`echo $MDATE`
         echo "Save info for ${FNAME[$COUNTER]} with date: ${FDATE[$COUNTER]}\n" >> $BKLOG
    fi
 
@@ -117,40 +148,32 @@ Function LoadMetaInfo{
 }
 
 #use filename data from array to copy files to temp directory
-COUNTER=$SROW
+#$1 = Dropbox directory name (could be sub-dir from DropBox Backup DIRectory)
+ function FilesToTemp {
+  local COUNTER=$SROW
+  local $DBDIRNAME=$1
 
-for DBFILE in "${FNAME[@]}"; do
-   #Get month from filedate
-   FYEAR=`echo "${FDATE[$COUNTER]}" | awk '{printf substr($1,0,5)}'`
+  for DBFILE in "${FNAME${DBDIRNAME}[@]}"; do
+    #Get year from filedate
+     local FYEAR=`echo "${FDATE${DBDIRNAME}[$COUNTER]}" | awk '{printf substr($1,13,5)}'`
 
-   #Move file to other dropbox folder for backup
-   SD=$( { time /Dropbox-Uploader/dropbox_uploader.sh copy "$DBPHOTODIR/$DBFILE" "$DBBKDIR/$FYEAR/$DBFILE" ; } 2>&1 )
+    #Move file to other dropbox folder for backup
+     local SD=$( { time /Dropbox-Uploader/dropbox_uploader.sh copy "$DBPHOTODIR/$DBFILE" "$DBBKDIR/$FYEAR/$DBFILE" ; } 2>&1 )
 
-   #Check for error
-   ERROR=`echo -n "$SD" | \.\.\.\ FAILED`
-   if [ n "$SD" | \.\.\.\ FAILED` ]; then
-	EINFO[$ECOUNT]=`echo $SD`
-	echo "- File $DBFILE has given an error\n" >> $BKLOG
-        echo "-- Error: ${EINFO[$ECOUNT]}D\n" >> $BKLOG
-        ECOUNT=$((ECOUNT+1))
-   fi
+    #Check for error
+     if [ !ErrorCheck("copy" $SD) ]; then
+   
+      #Extract time info
+       SD=`echo -n "$SD" | grep real `
+       DMIN=`echo -n "$SD" | awk '{printf substr($2,0,2)}'`
+       DSEC=`echo -n "$SD" | awk '{printf substr($2,3)}'`
 
-   #Extract time info
-   SD=`echo -n "$SD" | grep real `
-   DMIN=`echo -n "$SD" | awk '{printf substr($2,0,2)}'`
-   DSEC=`echo -n "$SD" | awk '{printf substr($2,3)}'`
-
-   echo "- File $DBFILE copied in $DMIN $DSEC to $DBBKDIR/$YEAR\n" >> $BKLOG
-
+       echo "- File $DBFILE copied in $DMIN $DSEC to $DBBKDIR/$YEAR\n" >> $BKLOG
+      fi
    COUNTER=$((COUNTER+1))
 done
+}
 
-#stop the running script to debug first part
-#exit 1
-
-#remove MapContent file = not needed
-echo -e "Remove map content file $MapContent for directory: $DBPHOTO" >> $BKLOG
-rm $MapContent
 
 #Download file from the tempory backup directory in Dropbox to local backup directory
 
@@ -173,9 +196,6 @@ rm $MapContent
 #Display directory info
  echo -e "Directory on with files: $BKDIR" >> $BKLOG
  echo -e "Directory stats:\n`ls -liha $BKDIR`\n" >> $BKLOG
-
-#stop the running script to debug second part
-#exit 1
 
 # Check if files can be removed from Dropbox
  touch $MapContent
@@ -244,13 +264,6 @@ for DBFILE in "${FNAME[@]}"; do
    COUNTER=$((COUNTER+1))
 done
 
-#stop the running script to debug third part
-#exit 1
-
-#remove MapContent file = not needed
-echo -e "Remove map content file from: $MapContent" >> $BKLOG
-rm $MapContent
-
 #for $counter<=$countfile; do
 #	a = `echo -n /Dropbox-Uploader/dropbox_uploader.sh list $DBDIR | awk 'FNR == $counter {printf $3}'`
 #	$counter++
@@ -306,6 +319,13 @@ echo ">> Backup for: $DBDIR finished @ `date +%H:%M:%S`\n" >> $BKLOG
 echo "Error overview during this proces:\n" >> $BKLOG
 echo ${EINFO[@]}
 
+#remove MapContent file = not needed
+echo -e "Remove map content files for directory: $DBPHOTO" >> $BKLOG
+#Display directory info
+ echo -e "Removing following files\n`ls -liha *.content $BKDIR`\n" >> $BKLOG
+ rm "$MAPCONTENTDIR*.content"
+
+
 # Mail this script out...ssmtp for GMail accounts, otherwise change for appropriate MTA
 # /usr/sbin/ssmtp -t < $BKLOG
-#mutt -s "$Sbject" $To < $BKLOG
+mutt -s "$Sbject" $To < $BKLOG
