@@ -26,7 +26,7 @@ RMONTH=`date -d 'now - 62 days' +%m`
  BKDIR="/mnt/photo/"
 
 # Directories in Dropbox with the files to backup (Photo) and the directory to tempory backup
- DBPHOTODIR="'Camera Uploads'"
+ DBPHOTODIR="Camera Uploads"
  #DBPHOTODIR="Test download"
  #DBBKDIR="Photo Backup"
 
