@@ -119,7 +119,8 @@ RDATE=`date -d 'now - 62 days'`
 
 # Read map content for the map
 	function ReadDBMap {
-	    echo $DBPHOTODIR >> $DBSUBDIR
+	    local MAPCONTENT="$MAPCONTENTDIR/$DBDIRNAME.sub"
+		echo $DBPHOTODIR >> $DBSUBDIR
 		
 	    while IFS=',' read -r DIRNAME READCOUNT; do
 			local DBDIRNAME=$(echo $DBPHOTODIR | tr -d ' ')
@@ -148,7 +149,7 @@ RDATE=`date -d 'now - 62 days'`
         				if [ $TYPE == $FILEID ]; then
         					echo -e "Download ${FNAME} with modification date: ${MDATE}" >> $BKLOG
         					echo -e "Download ${FNAME}"
-							if CopyToLocal "$DBDIRNAME" "$FNAME" "$MDATE"; then
+							if [ CopyToLocal "$DBDIRNAME" "$FNAME" "$MDATE" ]; then
 								echo -e "Check removal of ${FNAME} with modification date: ${MDATE}" >> $BKLOG
 								echo -e "Check modification ${FNAME}"
 								CheckRemoveFile "$DBDIRNAME" "$FNAME" "$MDATE"
@@ -194,13 +195,13 @@ RDATE=`date -d 'now - 62 days'`
 		local LOCALDIR="$BKDIR\$MYEAR\$MMONTH"
 		mkdir -p $LOCALDIR
 		
-		#Download file from the directory in Dropbox to local backup directory
+	  #Download file from the directory in Dropbox to local backup directory
 		SD=$( { time "$DBUPLOAD"/dropbox_uploader.sh -s download "$DBFILE" "$LOCALDIR"; } 2>&1 )
 		
-		#Check for error
+	  #Check for error
 		ERRORLINE=`echo -n "$SD" | grep ">"`
-		if ErrorCheck "copy" "$ERRORLINE"; then
-			#Extract time info
+		if [ ErrorCheck "copy" "$ERRORLINE" ]; then
+		  #Extract time info
 			SD=`echo -n "$SD" | grep real `
 			DMIN=`echo -n "$SD" | awk '{printf substr($2,0,2)}'`
 			DSEC=`echo -n "$SD" | awk '{printf substr($2,3)}'`
@@ -228,34 +229,36 @@ RDATE=`date -d 'now - 62 days'`
 	   local MMONTH=`date --date="$MDATE" '%m'`
 		
 		if [ $FYEAR -le $YEAR ] || [ $FMONTH -le $RMONTH ]; then
-				#Move file to other dropbox folder for backup
-	#           SD=$( { time "$DBUPLOAD"/dropbox_uploader.sh delete "$DBFILE" ; } 2>&1 )
-				SD=$( { time "$DBUPLOAD"/dropbox_uploader.sh copy "$DBFILE" "$DBBKDIR/$FYEAR/" ; } 2>&1 )
+		  #Move file to other dropbox folder for backup
+			#SD=$( { time "$DBUPLOAD"/dropbox_uploader.sh delete "$DBFILE" ; } 2>&1 )
+			SD=$( { time "$DBUPLOAD"/dropbox_uploader.sh copy "$DBFILE" "$DBBKDIR/$FYEAR/" ; } 2>&1 )
 
-				#Check for error
-				if [ !ErrorCheck "copy" $SD ]; then
-					#Extract time info
-					SD=`echo -n "$SD" | grep real `
-					DMIN=`echo -n "$SD" | awk '{printf substr($2,0,2)}'`
-					DSEC=`echo -n "$SD" | awk '{printf substr($2,3)}'`
+		  #Check for error
+			ERRORLINE=`echo -n "$SD" | grep ">"`
+			if [ ErrorCheck "copy" "$ERRORLINE" ]; then
+			  #Extract time info
+				SD=`echo -n "$SD" | grep real `
+				DMIN=`echo -n "$SD" | awk '{printf substr($2,0,2)}'`
+				DSEC=`echo -n "$SD" | awk '{printf substr($2,3)}'`
 
-					#echo "Removed ($2) from Dropbox ($1) in $DMINm $DSEC\n" >> $BKLOG
-					echo "PrankRemoved ($2) from Dropbox ($1) in $DMINm $DSEC\n" >> $BKLOG
-					
-					return 0
+				#echo "Removed ($2) from Dropbox ($1) in $DMINm $DSEC\n" >> $BKLOG
+				echo "PrankRemoved ($2) from Dropbox ($1) in $DMINm $DSEC\n" >> $BKLOG
 				
-				else
-					return 1
-				fi
-
+				return 0
+			
 			else
-				echo "- File $DBFILE not copied\n" >> $BKLOG
+				return 1
 			fi
-
-		COUNTER=$((COUNTER+1))
+		
+		else
+			echo "Skipped for remove ($2) from Dropbox ($1) it is modified on: $3\n" >> $BKLOG
+			return 0
+		fi
 		done
 	}
-
+	
+	exit
+	
 #use filename data from array to copy files to temp directory
  #$1 = Dropbox directory name (could be sub-dir from DropBox Backup DIRectory)
  #Required: $DBBKDIR as tempory DropBox directory
@@ -395,8 +398,10 @@ RDATE=`date -d 'now - 62 days'`
 
   #remove MapContent files = not needed
   #Display removing files
-	#echo -e "Removing following files\n`ls -liha *.content $BKDIR`\n" >> $BKLOG
-	#rm "$MAPCONTENTDIR*.content"
+	#echo -e "Removing following files\n`ls -liha $BKDIR | grep .content`\n" >> $BKLOG
+	#rm "$MAPCONTENTDIR/*.content"
+	#echo -e "Removing following files\n`ls -liha $BKDIR | grep .sub`\n" >> $BKLOG
+	#rm "$MAPCONTENTDIR/*.sub"
 
 
   # Mail this script out...ssmtp for GMail accounts, otherwise change for appropriate MTA
