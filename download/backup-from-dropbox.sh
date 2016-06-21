@@ -10,7 +10,9 @@
 #
 # This e-mail contains all the output this would give normally on the stderr/stdout.
 #
-# Last modified: 25-05-2016
+# Last modified: 16-06-2016
+#Test values available 0=true || 1=false
+TEST=1
 
 # Set time info in variable
 SEC=`date +%S`
@@ -22,7 +24,6 @@ YEAR=`date +%Y`
 RMONTH=`date -d 'now - 62 days' +%m`
 
 # Backup directory to download files in localy
- #BKDIR="/mnt/WD_public/Shared\ Pictures/"
  BKDIR="/mnt/photo/"
 
 # Directories in Dropbox with the files to backup (Photo) and the directory to tempory backup
@@ -44,18 +45,16 @@ RMONTH=`date -d 'now - 62 days' +%m`
 
 # Make log files
  # Backup log files directory
-  BKLOGDIR="/mnt/DBdownload/$YEAR/$MONTH/"
+  BKLOGDIR="/mnt/DBdownload/"
  # General log file
-  BKLOG="$BKLOGDIR$DAY.log"
+  BKLOG="$BKLOGDIR$YEAR$MONTH$DAY.log"
  # Location for saving Dropbox meta info of files in map
-  MAPCONTENTDIR="$BKLOGDIR$DAY"
+  MAPCONTENTDIR="$BKLOGDIR$YEAR$MONTH$DAY"
 
 # Since we send this through e-mail, start the e-mail stuff
  TO="root@zwerver.org"
  FROM="Backups <backups@zwerver.org>"
  SBJECT="Generated backup report Camera Upload DropBox on $YEAR.$MONTH.$DAY"
-
-
 
 #------------------NO CHANGES BELOW NEEDED--------------------------------------------------------------------------------
 
@@ -75,7 +74,7 @@ RMONTH=`date -d 'now - 62 days' +%m`
  echo "From: $FROM" >> $BKLOG
  echo "Subject: $SBJECT\n" >> $BKLOG
 
- echo ">> Backup for: $YEAR.$MONTH.$DAY started @ `date +%H:%M:%S`\n" >> $BKLOG
+ echo ">> Backup for: $DBPHOTODIR to local ($BKDIR) started @ `date +%H:%M:%S`\n" >> $BKLOG
 
 
 #-----------------Load functions to execute--------------------------------------------------------------------------------
@@ -85,16 +84,11 @@ RMONTH=`date -d 'now - 62 days' +%m`
  #$2 = Error information
  #Return: 0=true || 1=false
 	function ErrorCheck {
-		echo -e "Type: $1"
-		echo -e "Error: $2"
-
 		case $1 in
 			list)
 				local ERROR=`echo -n "$2" | egrep "$REGEXDONE"`
 				if [ "$ERROR" ]; then
-					#EINFO[$ECOUNT]=`echo $(head -n 1 $1)`
 					EINFO[$ECOUNT]="$2"
-					echo "->> Error: ${EINFO[$ECOUNT]}" >> $BKLOG
 					ECOUNT=$((ECOUNT+1))
 					return 0
 				else
@@ -106,8 +100,6 @@ RMONTH=`date -d 'now - 62 days' +%m`
 				local ERROR2=`echo -n "$2" | egrep "$REGEXSKIP"`
 				if [ "$ERROR" ] || [ "$ERROR2" ]; then
 					EINFO[$ECOUNT]="$2"
-					#echo "- File $DBFILE has given an error\n" >> $BKLOG
-					echo "->> Error: ${EINFO[$ECOUNT]}" >> $BKLOG
 					ECOUNT=$((ECOUNT+1))
 					return 0
 				else
@@ -116,11 +108,15 @@ RMONTH=`date -d 'now - 62 days' +%m`
 			;;
 			*)
 				EINFO[$ECOUNT]=`echo "No error type given\n Error string is: $2"`
-				echo "--> Error: ${EINFO[$ECOUNT]}"
 				ECOUNT=$((ECOUNT+1))
 				return 0
 			;;
 		esac
+		if [ $TEST -eq 0 ]; then
+			echo -e "Type: $1"
+                        echo -e "Error: $2"
+			echo "->> Error: ${EINFO[$ECOUNT]}" >> $BKLOG
+		fi
 	}
 
 #copy photos to the local directory
@@ -131,9 +127,11 @@ RMONTH=`date -d 'now - 62 days' +%m`
 	function CopyToLocal {
 		local DBFILE="$1/$2"
 
-		echo -e "Path: $1"
-		echo -e "File: $2"
-		echo -e "Mod: $3"
+		if [ $TEST -eq 0 ] ; then
+			echo -e "Path: $1"
+			echo -e "File: $2"
+			echo -e "Mod: $3"
+		fi
 
 	  #Get month from modification date
 		local MYEAR=`date --date="$3" +%Y`
@@ -172,9 +170,13 @@ RMONTH=`date -d 'now - 62 days' +%m`
 	   local MYEAR=`date --date="$3" +%Y`
 	   local MMONTH=`date --date="$3" +%m`
 
-		if [ $MYEAR -le $YEAR ] || [ $MMONTH -le $RMONTH ]; then
-		  #Move file to other dropbox folder for backup
-			SD=$( { time "$DBUPLOAD"/dropbox_uploader.sh delete "$DBFILE" ; } 2>&1 )
+		if [ $MYEAR -lt $YEAR ] || [ $MMONTH -le $RMONTH ]; then
+		  #Remove file from dropbox folder
+			if [ $TEST -eq 0 ] ; then
+				SD=$( { time "$DBUPLOAD"/dropbox_uploader.sh share "$DBFILE" ; } 2>&1 )
+			else
+				SD=$( { time "$DBUPLOAD"/dropbox_uploader.sh delete "$DBFILE" ; } 2>&1 )
+			fi
 
 		  #Check for error
 			ERRORLINE=`echo -n "$SD" | grep ">"`
@@ -229,23 +231,20 @@ RMONTH=`date -d 'now - 62 days' +%m`
        				FNAME=$(echo $FNAME | cut -c 2-)
        				MDATE=$(echo $MDATE | cut -c 2-)
 
-       			#Put info into array
+       			#Check if file then copy to local && if dir then add as subdir in file
        				if [ $TYPE == $FILEID ]; then
        					echo -e "Download ${FNAME} with modification date: ${MDATE}" >> $BKLOG
-       					echo -e "Download ${FNAME}"
 					if CopyToLocal "$DIRNAME" "$FNAME" "$MDATE" ; then
 							echo -e "Check removal of ${FNAME} with modification date: ${MDATE}" >> $BKLOG
-							echo -e "Check modification ${FNAME}"
 							CheckRemoveFile "$DIRNAME" "$FNAME" "$MDATE"
 
 					else
-							echo -e "Problem downloading ${FNAME}"
+							echo -e "Problem downloading ${FNAME}" >> $BKLOG
 
 					fi
 
        				elif [ $TYPE == $FOLDERID ]; then
      					echo -e "New folder detected: $FNAME" >> $BKLOG
-       					echo -e "Directory ${FNAME}"
 					echo -e "$DIRNAME/$FNAME" >> $DBSUBDIR
 
        				else
@@ -285,12 +284,12 @@ RMONTH=`date -d 'now - 62 days' +%m`
 
  #remove MapContent files = not needed
  #Display removing files
-	echo -e "Removing following files\n`ls -liha $BKDIR | grep .content`\n" >> $BKLOG
+	echo -e "Removing following files\n`ls -liha $MAPCONTENTDIR | grep .content`\n" >> $BKLOG
 	rm "$MAPCONTENTDIR/*.content"
-	echo -e "Removing following files\n`ls -liha $BKDIR | grep .sub`\n" >> $BKLOG
+	echo -e "Removing following files\n`ls -liha $MAPCONTENTDIR | grep .sub`\n" >> $BKLOG
 	rm "$MAPCONTENTDIR/*.sub"
 
 
  # Mail this script out...ssmtp for GMail accounts, otherwise change for appropriate MTA
  # /usr/sbin/ssmtp -t < $BKLOG
-	mutt -s "$Sbject" $To < $BKLOG
+	mutt -s "$Sbject" -a "$BKLOG" -H "$BKLOG" < $BKLOG
