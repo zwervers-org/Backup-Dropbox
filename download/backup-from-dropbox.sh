@@ -88,10 +88,10 @@ RMONTH=`date -d 'now - 62 days' +%m`
 			list)
 				local ERROR=`echo -n "$2" | egrep "$REGEXDONE"`
 				if [ "$ERROR" ]; then
-					EINFO[$ECOUNT]="$2"
-					ECOUNT=$((ECOUNT+1))
 					return 0
 				else
+					EINFO[$ECOUNT]="$2"
+					ECOUNT=$((ECOUNT+1))
 					return 1
 				fi
 			;;
@@ -99,17 +99,17 @@ RMONTH=`date -d 'now - 62 days' +%m`
 				local ERROR=`echo -n "$2" | egrep "$REGEXDONE"`
 				local ERROR2=`echo -n "$2" | egrep "$REGEXSKIP"`
 				if [ "$ERROR" ] || [ "$ERROR2" ]; then
-					EINFO[$ECOUNT]="$2"
-					ECOUNT=$((ECOUNT+1))
 					return 0
 				else
+					EINFO[$ECOUNT]="$2"
+					ECOUNT=$((ECOUNT+1))
 					return 1
 				fi
 			;;
 			*)
 				EINFO[$ECOUNT]=`echo "No error type given\n Error string is: $2"`
 				ECOUNT=$((ECOUNT+1))
-				return 0
+				return 1
 			;;
 		esac
 		if [ $TEST -eq 0 ]; then
