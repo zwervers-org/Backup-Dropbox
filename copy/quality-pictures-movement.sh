@@ -22,7 +22,7 @@ YEAR=`date +%Y`
 # Quality picture directory to move files from
  QUALITYDIR="Quality"
 # Regex info for getting the supplier name from the directory
- REGEXSUPPLIER=".\[ A-Z, a-z ]\"
+ REGEXSUPPLIER="([A-Za-z\s]*)\b"
 # Remove files from quality directory that are made earlier than
  QRMONTH=`date -d 'now - 62 days' +%m`
 
@@ -43,6 +43,8 @@ YEAR=`date +%Y`
 # Make log files
  # Backup log files directory
   BKLOGDIR="/var/log/qcscript/"
+ # Tempory local directory
+  LOCALTEMP="$BKLOGDIR/tempory/"
  # General log file
   BKLOG="$BKLOGDIR$YEAR$MONTH$DAY.log"
  # Location for saving Dropbox meta info of files in map
@@ -120,12 +122,13 @@ YEAR=`date +%Y`
 		fi
 	}
 
-# Function use the Dropbox_Uploader script with the own error checker
+# Function use the Dropbox_Uploader script with integrated error checker
   #$1 = Type of use
   #$2 = Source
   #[$3 = Target]
   #[$4 = Special options]
 	function DropboxScript {
+		echo -e "Dropbox script" >> $BKLOG
 		if [ $TEST -eq 0 ]; then
 			echo -e "DropboxScript input:"
 			echo -e "-->    Type: $1"
@@ -167,6 +170,7 @@ YEAR=`date +%Y`
   #$5 = Arrival date (extract form directory)
   #Return: 0=true || 1=false
 	function MoveToSupplier {
+		echo -e "Move to supplier" >> $BKLOG
 		if [ $TEST -eq 0 ]; then
 			echo -e "MoveToSupplier input:"
 			echo -e "-->     Source path: $1"
@@ -195,8 +199,16 @@ YEAR=`date +%Y`
  #$2 = Filename/directory to be checked
  #$3 = Modification date of the file/directory
 	function CheckRemoveFiles {
-	   local DBFILE="$1/$2"
-
+		echo -e "Check remove files" >> $BKLOG
+		local DBFILE="$1/$2"
+		
+		if [ $TEST -eq 0 ]; then
+			echo -e "Check remove files input:"
+			echo -e "---Source:       $1"
+			echo -e "---Filename:     $2"
+			echo -e "---Modification: $3"
+		fi
+		
 	 #Get month from modification date
 	   local MYEAR=`date --date="$3" +%Y`
 	   local MMONTH=`date --date="$3" +%m`
@@ -235,7 +247,14 @@ YEAR=`date +%Y`
  #$1 = Source directory name that has to be checked
  #$2 = Filename to be checked
 	function ResizePictures {
-	   local DBFILE="$1/$2"
+		echo -e "Resize Pictures" >> $BKLOG
+		local DBFILE="$1/$2"
+	   
+		if [ $TEST -eq 0 ]; then
+			echo -e "Resize pictures input:"
+			echo -e "---Source:   $1"
+			echo -e "---Filename: $2"
+		fi
 
 	  #Move the file from the source directory to local tempory directory
 		if DropboxScript "download" "$DBFILE" "$LOCALTEMP" ; then
@@ -317,10 +336,8 @@ YEAR=`date +%Y`
     		COUNTFILES=$(wc -l < "$MAPCONTENT")
     		echo -e "Need to read $COUNTFILES lines in directory $DIRNAME" >> $BKLOG
 
-#Hier verder met verwerken -> Extract supplier name -> scipt root files -> extract arrival date -> if extractions are corrupt then
-
-       		#read file name data into variable
-		COUNTER=1
+			#read row information into variables
+			COUNTER=1
        		while IFS=']' read -r TYPE SIZE FNAME MDATE; do
        			if [ $COUNTER -ge $SROW ]; then
        				#Erase first character '[' from the value
@@ -328,22 +345,45 @@ YEAR=`date +%Y`
        				SIZE=$(echo $SIZE | cut -c 2-)
        				FNAME=$(echo $FNAME | cut -c 2-)
        				MDATE=$(echo $MDATE | cut -c 2-)
+					SUBCHECK=$(x//[^/])
 
        			#Put info into array
        				if [ $TYPE == $FILEID ]; then
-       					echo -e "Download ${FNAME} with modification date: ${MDATE}" >> $BKLOG
-					if CopyToLocal "$DIRNAME" "$FNAME" "$MDATE" ; then
-							echo -e "Check removal of ${FNAME} with modification date: ${MDATE}" >> $BKLOG
-							CheckRemoveFile "$DIRNAME" "$FNAME" "$MDATE"
-
-					else
-							echo -e "Problem downloading ${FNAME}" >> $BKLOG
-
-					fi
-
+						if [ $DIRNAME == $QUALITYDIR ] ; then
+							echo -e "Files found in maindirectory -> doing nothing" >> $BKLOG
+						elif [ $SUBCHECK > 2 ] ; then
+							echo -e "Files found in sub-subdirectory -> copy to local -> resize -> upload to supplier's directory (same sub)" >> $BKLOG
+							if [ $TEST -eq 0 ]; then
+								echo -e "sub-subdirectory found ($DIRNAME)"
+							fi
+						else
+							echo -e "Files found to download -> resize -> upload to supplier's directory"
+							if DropboxScript "dowload" "$DIRNAME/$FNAME" "$LOCALTEMP" ; then
+								if ResizePictures "$LOCALTEMP" "$FNAME" ; then
+								   #Extract Supplier/Container/Arrival information from directory name
+								    IFS='-' read SUPPLIER CONTAINERNR ARRIVALDATE << $DIRNAME
+									local $SUPPLREG=$(echo -n "$DIRNAME" | egrep "$REGEXSUPPLIER" | cut -c 2-)
+									local $SUPPLIERDIR=$(echo $SUPPLIER | cut -c 2-)
+									
+									if [ $TEST -eq 0 ]; then
+										echo -e "Extracted information from $DIRNAME:"
+										echo -e "--->Supplier regex: $SUPPLREG"
+										echo -e "--->Supplier dir:   $SUPPLIERDIR"
+										echo -e "--->Containernr:    $CONTAINERNR"
+										echo -e "--->Arrival date:   $ARRIVALDATE"
+									fi
+									
+									if [ $SUPPLREG == $SUPPLIERDIR ]; then
+										DropboxScript "upload" "LOCALTEMP/$FNAME" "$SUPPLIERDIR/$CONTAINERNR$ARRIVALDATE/$FNAME" "-s"
+									else
+										echo -e "Supplier not available in directory name ($DIRNAME)\n Put resized files in quality directory" >> $BKLOG
+										DropboxScript "upload" "LOCALTEMP/$FNAME" "$DIRNAME" "-s"
+									fi
+								fi
+							fi
        				elif [ $TYPE == $FOLDERID ]; then
      					echo -e "New folder detected: $FNAME" >> $BKLOG
-					echo -e "$DIRNAME/$FNAME" >> $DBSUBDIR
+						echo -e "$DIRNAME/$FNAME" >> $DBSUBDIR
 
        				else
        					echo -e "Type ($TYPE) not recongiced\n
