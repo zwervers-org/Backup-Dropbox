@@ -20,14 +20,22 @@ MONTH=`date +%m`
 YEAR=`date +%Y`
 
 # Quality picture directory to move files from
- QUALITYDIR="Quality"
+ if [ $TEST -eq 0 ]; then
+	QUALITYDIR="TEST/Quality Control"
+ else
+	QUALITYDIR="Quality"
+ fi
 # Regex info for getting the supplier name from the directory
  REGEXSUPPLIER="([A-Za-z\s]*)\b"
 # Remove files from quality directory that are made earlier than
  QRMONTH=`date -d 'now - 62 days' +%m`
 
 # Main directorie in Dropbox were the supplier's directories are located
- MSUPPLIERDIR="/"
+ if [ $TEST -eq 0 ]; then
+	MSUPPLIERDIR="TEST/"
+ else
+	MSUPPLIERDIR="/"
+ fi
 # Remove files from supplier's directory that are made earlier than
  SRMONTH=`date -d 'now - 62 days' +%m`
 
@@ -351,7 +359,7 @@ YEAR=`date +%Y`
        				if [ $TYPE == $FILEID ]; then
 						if [ $DIRNAME == $QUALITYDIR ] ; then
 							echo -e "Files found in maindirectory -> doing nothing" >> $BKLOG
-						elif [ $SUBCHECK > 2 ] ; then
+						elif [ $SUBCHECK -gt 2 ] ; then
 							echo -e "Files found in sub-subdirectory -> copy to local -> resize -> upload to supplier's directory (same sub)" >> $BKLOG
 							if [ $TEST -eq 0 ]; then
 								echo -e "sub-subdirectory found ($DIRNAME)"
@@ -415,13 +423,14 @@ YEAR=`date +%Y`
 		echo "${EINFO[@]}" >> $BKLOG
 	fi
 
- #remove MapContent files = not needed
- #Display removing files
-	echo -e "Removing following files\n`ls -liha $MAPCONTENTDIR | grep .content`\n" >> $BKLOG
-	rm "$MAPCONTENTDIR/*.content"
-	echo -e "Removing following files\n`ls -liha $MAPCONTENTDIR | grep .sub`\n" >> $BKLOG
-	rm "$MAPCONTENTDIR/*.sub"
+if [ $TEST !-eq 0 ]; then
+	 #remove MapContent files = not needed
+	 #Display removing files
+		echo -e "Removing following files\n`ls -liha $MAPCONTENTDIR | grep .content`\n" >> $BKLOG
+		rm "$MAPCONTENTDIR/*.content"
+		echo -e "Removing following files\n`ls -liha $MAPCONTENTDIR | grep .sub`\n" >> $BKLOG
+		rm "$MAPCONTENTDIR/*.sub"
 
-
- # Mail this script out...ssmtp for GMail accounts, otherwise change for appropriate MTA
-	mutt -s "$Sbject" -a "$BKLOG" -H "$BKLOG" $To < $BKLOG
+	 # Mail this script out...ssmtp for GMail accounts, otherwise change for appropriate MTA
+		mutt -s "$Sbject" -a "$BKLOG" -H "$BKLOG" $To < $BKLOG
+fi
